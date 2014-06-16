@@ -43,6 +43,8 @@ module.exports = (robot) ->
     msg.reply msgs.join "\n"
 
   robot.hear /<a.*>(.+)<\/a> commented on <a.*>pull request (.+)<\/a> of <a.*>kaizenplatform\/(.+)<\/a>: hubot reviewer( polite)?/i, (msg) ->
+    if !noticeRoom?
+      return
     from = msg.match[1]
     pr = msg.match[2]
     repo = msg.match[3]
@@ -118,14 +120,16 @@ module.exports = (robot) ->
         {reviewer, issue} = ctx
         messages = []
         message = "#{reviewer.login} has been assigned for #{issue.html_url} as a reviewer"
+        # hipchat needs image-ish url to display inline image
+        avatar = "#{reviewer.avatar_url}".replace(/(#.*|$)/, '#.png')
         if from?
           robot.messageRoom noticeRoom, "@#{from} #{message}"
+          if ghWithAvatar
+            robot.messageRoom noticeRoom, avatar
         else
           msg.reply message
-
-        if ghWithAvatar
-          # hipchat needs image-ish url to display inline image
-          msg.send "#{reviewer.avatar_url}".replace(/(#.*|$)/, '#.png')
+          if ghWithAvatar
+            msg.send avatar
 
         # update stats
         stats = (robot.brain.get STATS_KEY) or {}

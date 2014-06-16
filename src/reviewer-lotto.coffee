@@ -42,7 +42,7 @@ module.exports = (robot) ->
     msgs.push "#{login}, #{count}" for login, count of stats
     msg.reply msgs.join "\n"
 
-  robot.hear /<a.*>(.+)<\/a> commented on <a.*>pull request (.+)<\/a> of <a.*>kaizenplatform\/(.+)<\/a>: hubot reviewer( polite)?/i, (msg) ->
+  robot.hear /<a.*>(.+)<\/a> commented on <a.*>pull request (.+)<\/a> of <a.*>(.+)\/(.+)<\/a>: hubot reviewer( polite)?/i, (msg) ->
     if !noticeRoom?
       return
     from = msg.match[1]

@@ -23,6 +23,7 @@ module.exports = (robot) ->
   ghOrg         = process.env.HUBOT_GITHUB_ORG
   ghReviwerTeam = process.env.HUBOT_GITHUB_REVIEWER_TEAM
   ghWithAvatar  = process.env.HUBOT_GITHUB_WITH_AVATAR
+  noticeRoom    = process.env.HUBOT_NOTICE_ROOM
 
   STATS_KEY     = 'reviewer-lotto-stats'
 
@@ -41,15 +42,24 @@ module.exports = (robot) ->
     msgs.push "#{login}, #{count}" for login, count of stats
     msg.reply msgs.join "\n"
 
+  robot.hear /<a.*>(.+)<\/a> commented on <a.*>pull request (.+)<\/a> of <a.*>kaizenplatform\/(.+)<\/a>: hubot reviewer( polite)?/i, (msg) ->
+    from = msg.match[1]
+    pr = msg.match[2]
+    repo = msg.match[3]
+    polite = msg.match[4]?
+    lot(repo, pr, polite, from)
+
   robot.respond /reviewer for ([\w-\.]+) (\d+)( polite)?$/i, (msg) ->
     repo = msg.match[1]
     pr   = msg.match[2]
     polite = msg.match[3]?
+    lot(repo, pr, polite, nil)
+
+  lot = (repo, pr, polite, from) ->
     prParams =
       user: ghOrg
       repo: repo
       number: pr
-
     gh = new GitHubApi version: "3.0.0"
     gh.authenticate {type: "oauth", token: ghToken}
 
@@ -107,7 +117,12 @@ module.exports = (robot) ->
       (ctx, cb) ->
         {reviewer, issue} = ctx
         messages = []
-        msg.reply "#{reviewer.login} has been assigned for #{issue.html_url} as a reviewer"
+        message = "#{reviewer.login} has been assigned for #{issue.html_url} as a reviewer"
+        if from?
+          robot.messageRoom noticeRoom, "@#{from} #{message}"
+        else
+          msg.reply message
+
         if ghWithAvatar
           # hipchat needs image-ish url to display inline image
           msg.send "#{reviewer.avatar_url}".replace(/(#.*|$)/, '#.png')

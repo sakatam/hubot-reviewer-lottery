@@ -49,15 +49,21 @@ module.exports = (robot) ->
     pr = msg.match[2]
     repo = msg.match[3]
     polite = msg.match[4]?
-    lot(repo, pr, polite, from)
+    lot msg, repo, pr, polite, (message, avatarUrl) ->
+      robot.messageRoom noticeRoom, "@#{from} #{message}"
+      if ghWithAvatar
+        robot.messageRoom noticeRoom, avatarUrl
 
   robot.respond /reviewer for ([\w-\.]+) (\d+)( polite)?$/i, (msg) ->
     repo = msg.match[1]
     pr   = msg.match[2]
     polite = msg.match[3]?
-    lot(repo, pr, polite, nil)
+    lot msg, repo, pr, polite, (message, avatarUrl) ->
+      msg.reply message
+      if ghWithAvatar
+        msg.send avatarUrl
 
-  lot = (repo, pr, polite, from) ->
+  lot = (msg, repo, pr, polite, done) ->
     prParams =
       user: ghOrg
       repo: repo
@@ -121,15 +127,8 @@ module.exports = (robot) ->
         messages = []
         message = "#{reviewer.login} has been assigned for #{issue.html_url} as a reviewer"
         # hipchat needs image-ish url to display inline image
-        avatar = "#{reviewer.avatar_url}".replace(/(#.*|$)/, '#.png')
-        if from?
-          robot.messageRoom noticeRoom, "@#{from} #{message}"
-          if ghWithAvatar
-            robot.messageRoom noticeRoom, avatar
-        else
-          msg.reply message
-          if ghWithAvatar
-            msg.send avatar
+        avatarUrl = "#{reviewer.avatar_url}".replace(/(#.*|$)/, '#.png')
+        done(message, avatarUrl)
 
         # update stats
         stats = (robot.brain.get STATS_KEY) or {}

@@ -5,11 +5,14 @@
 #   HUBOT_GITHUB_TOKEN (required)
 #   HUBOT_GITHUB_ORG (required)
 #   HUBOT_GITHUB_REVIEWER_TEAM (required)
-#     github team id. this script randomly picks a reviewer from this team members.
+#     default github team id. this script will randomly pick a reviewer from
+#     this team if a specific team has not been assigned to a repo.
 #
 # Commands:
 #   hubot reviewer for <repo> <pull> - assigns random reviewer for pull request
 #   hubot reviewer show stats - proves the lotto has no bias
+#   hubot reviewer list team assignments - lists all team ids assigned to repos
+#   hubot reviewer set team <id> for <repo> - assigns a specific team id to a repo
 #
 # Author:
 #   sakatam
@@ -20,16 +23,16 @@ GitHubApi = require "github"
 weighted  = require "weighted"
 
 module.exports = (robot) ->
-  ghToken       = process.env.HUBOT_GITHUB_TOKEN
-  ghOrg         = process.env.HUBOT_GITHUB_ORG
-  # ghReviwerTeam = process.env.HUBOT_GITHUB_REVIEWER_TEAM
-  ghWithAvatar  = process.env.HUBOT_GITHUB_WITH_AVATAR
-  normalMessage = process.env.HUBOT_REVIEWER_LOTTO_MESSAGE || "Please review this."
-  politeMessage = process.env.HUBOT_REVIEWER_LOTTO_POLITE_MESSAGE || "#{normalMessage} :bow::bow::bow::bow:"
-  debug         = process.env.HUBOT_REVIEWER_LOTTO_DEBUG in ["1", "true"]
+  ghToken               = process.env.HUBOT_GITHUB_TOKEN
+  ghOrg                 = process.env.HUBOT_GITHUB_ORG
+  ghDefaultReviewerTeam = process.env.HUBOT_GITHUB_REVIEWER_TEAM
+  ghWithAvatar          = process.env.HUBOT_GITHUB_WITH_AVATAR
+  normalMessage         = process.env.HUBOT_REVIEWER_LOTTO_MESSAGE || "Please review this."
+  politeMessage         = process.env.HUBOT_REVIEWER_LOTTO_POLITE_MESSAGE || "#{normalMessage} :bow::bow::bow::bow:"
+  debug                 = process.env.HUBOT_REVIEWER_LOTTO_DEBUG in ["1", "true"]
 
-  STATS_KEY     = 'reviewer-lotto-stats'
-  REPO_TEAMS    = 'repo-team-assignments'
+  STATS_KEY             = 'reviewer-lotto-stats'
+  REPO_TEAMS            = 'repo-team-assignments'
 
   # draw lotto - weighted random selection
   draw = (reviewers, stats = null) ->
@@ -97,8 +100,7 @@ module.exports = (robot) ->
       (cb) ->
         # get team members
         repoTeams     = (robot.brain.get REPO_TEAMS) or {}
-        ghReviwerTeam = repoTeams[repo]
-        return cb "error: no team id assigned for repo: #{repo}" if !(repo of obj)
+        ghReviwerTeam = repoTeams[repo] || ghDefaultReviewerTeam
 
         params =
           id: ghReviwerTeam

@@ -9,10 +9,12 @@
 #     this team if a specific team has not been assigned to a repo.
 #
 # Commands:
-#   hubot reviewer for <repo> <pull> - assigns random reviewer for pull request
-#   hubot reviewer show stats - proves the lotto has no bias
-#   hubot reviewer list team assignments - lists all team ids assigned to repos
+#   hubot reviewer help                     - shows this help
+#   hubot reviewer for <repo> <pull>        - assigns random reviewer for pull request
+#   hubot reviewer show stats               - proves the lotto has no bias
+#   hubot reviewer list team assignments    - lists all team ids assigned to repos
 #   hubot reviewer set team <id> for <repo> - assigns a specific team id to a repo
+#   hubot reviewer clear team for <repo>    - clears the team id for a repo
 #
 # Author:
 #   sakatam
@@ -62,22 +64,22 @@ module.exports = (robot) ->
 
   robot.respond /reviewer reset stats/i, (msg) ->
     robot.brain.set STATS_KEY, {}
-    msg.reply "Reset reviewer stats!"
+    msg.send "Reset reviewer stats!"
 
   robot.respond /reviewer show stats$/i, (msg) ->
     stats = robot.brain.get STATS_KEY
-    msgs = ["login, percentage, num assigned"]
+    msgs = ["*login, percentage, num assigned*"]
     total = 0
     for login, count of stats
       total += count
     for login, count of stats
       percentage = Math.floor(count * 100.0 / total)
       msgs.push "#{login}, #{percentage}%, #{count}"
-    msg.reply msgs.join "\n"
+    msg.send msgs.join "\n"
 
   robot.respond /reviewer for ([\w-\.]+) (\d+)( polite)?$/i, (msg) ->
-    repo = msg.match[1]
-    pr   = msg.match[2]
+    repo   = msg.match[1]
+    pr     = msg.match[2]
     polite = msg.match[3]?
     prParams =
       user: ghOrg
@@ -100,7 +102,7 @@ module.exports = (robot) ->
       (cb) ->
         # get team members
         repoTeams     = (robot.brain.get REPO_TEAMS) or {}
-        ghReviwerTeam = repoTeams[repo] || ghDefaultReviewerTeam
+        ghReviwerTeam = repoTeams[repo] or ghDefaultReviewerTeam
 
         params =
           id: ghReviwerTeam
@@ -113,8 +115,8 @@ module.exports = (robot) ->
         # check if pull req exists
         gh.pullRequests.get prParams, (err, res) ->
           return cb "error on getting pull request: #{err.toString()}" if err?
-          ctx['issue'] = res
-          ctx['creator'] = res.user
+          ctx['issue']    = res
+          ctx['creator']  = res.user
           ctx['assignee'] = res.assignee
           cb null, ctx
 
@@ -161,21 +163,43 @@ module.exports = (robot) ->
 
     ], (err, res) ->
       if err?
-        msg.reply "an error occured.\n#{err}"
+        msg.send "an error occured.\n#{err}"
 
   robot.respond /reviewer set team (\d+) for ([\w-\.]+)/i, (msg) ->
-    repo   = msg.match[1]
-    teamId = msg.match[2]
+    teamId = msg.match[1]
+    repo   = msg.match[2]
 
     repoTeams = (robot.brain.get REPO_TEAMS) or {}
     repoTeams[repo] = teamId
 
     robot.brain.set REPO_TEAMS, repoTeams
-    msg.reply "Team ##{teamId} set for repo: #{repo}."
+    msg.send "Team: *#{teamId}* set for repo: *#{repo}*."
 
-  robot.respond /reviewer list (assignments|team assignments)/i, (msg) ->
+  robot.respond /reviewer clear team for ([\w-\.]+)/i, (msg) ->
+    repo   = msg.match[1]
+
+    repoTeams = (robot.brain.get REPO_TEAMS) or {}
+    delete repoTeams[repo]
+
+    robot.brain.set REPO_TEAMS, repoTeams
+    msg.send "Team cleared for repo: *#{repo}*."
+
+  robot.respond /reviewer list (assignments| team assignments)/i, (msg) ->
     repoTeams = (robot.brain.get REPO_TEAMS) or {}
 
-    msg.reply "Current repo/team assignments:"
+    response = "*Current repo/team assignments:*\n" +
+               "*DEFAULT*           - Team Id: *#{ghDefaultReviewerTeam}*"
+
     for repo, teamId of repoTeams
-      msg.reply "Repo: #{repo} - Team Id: #{teamId}"
+      response += "\nRepo: *#{repo}* - Team Id: *#{teamId}*"
+
+    msg.send response
+
+  robot.respond /reviewer (help|\-\-h|\-h|\-help)/i, (msg) ->
+    msg.send "*COMMANDS:*\n" +
+             ">_bot reviewer help_:   shows this help\n" +
+             ">_bot reviewer for *<repo>* *<pull>*_:   assigns random reviewer for pull request\n" +
+             ">_bot reviewer show stats_:   proves the lotto has no bias\n" +
+             ">_bot reviewer list team assignments_:   lists all team ids assigned to repos\n" +
+             ">_bot reviewer set team *<id>* for *<repo>*_:   assigns a specific team id to a repo\n" +
+             ">_bot reviewer clear team for *<repo>*_:   clears the team id for a repo"

@@ -22,13 +22,14 @@ weighted  = require "weighted"
 module.exports = (robot) ->
   ghToken       = process.env.HUBOT_GITHUB_TOKEN
   ghOrg         = process.env.HUBOT_GITHUB_ORG
-  ghReviwerTeam = process.env.HUBOT_GITHUB_REVIEWER_TEAM
+  # ghReviwerTeam = process.env.HUBOT_GITHUB_REVIEWER_TEAM
   ghWithAvatar  = process.env.HUBOT_GITHUB_WITH_AVATAR
   normalMessage = process.env.HUBOT_REVIEWER_LOTTO_MESSAGE || "Please review this."
   politeMessage = process.env.HUBOT_REVIEWER_LOTTO_POLITE_MESSAGE || "#{normalMessage} :bow::bow::bow::bow:"
   debug         = process.env.HUBOT_REVIEWER_LOTTO_DEBUG in ["1", "true"]
 
   STATS_KEY     = 'reviewer-lotto-stats'
+  REPO_TEAMS    = 'repo-team-assignments'
 
   # draw lotto - weighted random selection
   draw = (reviewers, stats = null) ->
@@ -48,13 +49,12 @@ module.exports = (robot) ->
     selected = weighted.select arms
     _.find reviewers, ({login}) -> login == selected
 
-  if !ghToken? or !ghOrg? or !ghReviwerTeam?
+  if !ghToken? or !ghOrg?
     return robot.logger.error """
       reviewer-lottery is not loaded due to missing configuration!
       #{__filename}
       HUBOT_GITHUB_TOKEN: #{ghToken}
       HUBOT_GITHUB_ORG: #{ghOrg}
-      HUBOT_GITHUB_REVIEWER_TEAM: #{ghReviwerTeam}
     """
 
   robot.respond /reviewer reset stats/i, (msg) ->
@@ -96,6 +96,10 @@ module.exports = (robot) ->
     async.waterfall [
       (cb) ->
         # get team members
+        repoTeams     = (robot.brain.get REPO_TEAMS) or {}
+        ghReviwerTeam = repoTeams[repo]
+        return cb "error: no team id assigned for repo: #{repo}" if !(repo of obj)
+
         params =
           id: ghReviwerTeam
           per_page: 100
@@ -156,3 +160,20 @@ module.exports = (robot) ->
     ], (err, res) ->
       if err?
         msg.reply "an error occured.\n#{err}"
+
+  robot.respond /reviewer set team (\d+) for ([\w-\.]+)/i, (msg) ->
+    repo   = msg.match[1]
+    teamId = msg.match[2]
+
+    repoTeams = (robot.brain.get REPO_TEAMS) or {}
+    repoTeams[repo] = teamId
+
+    robot.brain.set REPO_TEAMS, repoTeams
+    msg.reply "Team ##{teamId} set for repo: #{repo}."
+
+  robot.respond /reviewer list (assignments|team assignments)/i, (msg) ->
+    repoTeams = (robot.brain.get REPO_TEAMS) or {}
+
+    msg.reply "Current repo/team assignments:"
+    for repo, teamId of repoTeams
+      msg.reply "Repo: #{repo} - Team Id: #{teamId}"

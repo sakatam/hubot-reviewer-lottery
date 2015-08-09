@@ -13,6 +13,7 @@
 #   hubot reviewer for <repo> <pull>        - assigns random reviewer for pull request
 #   hubot reviewer show stats               - proves the lotto has no bias
 #   hubot reviewer list team assignments    - lists all team ids assigned to repos
+#   hubot reviewer ping crs                 - pings all outstanding code reviews
 #   hubot reviewer set team <id> for <repo> - assigns a specific team id to a repo
 #   hubot reviewer clear team for <repo>    - clears the team id for a repo
 #
@@ -34,6 +35,7 @@ module.exports = (robot) ->
   debug                 = process.env.HUBOT_REVIEWER_LOTTO_DEBUG in ["1", "true"]
 
   STATS_KEY             = 'reviewer-lotto-stats'
+  PULL_REQUEST_QUEUE    = 'pull-request-queue'
   REPO_TEAMS            = 'repo-team-assignments'
 
   # draw lotto - weighted random selection
@@ -53,6 +55,37 @@ module.exports = (robot) ->
 
     selected = weighted.select arms
     _.find reviewers, ({login}) -> login == selected
+
+  pingCodeReviews = ->
+    gh = new GitHubApi version: "3.0.0"
+    gh.authenticate {type: "oauth", token: ghToken}
+
+    old_pr_queue = robot.brain.get PULL_REQUEST_QUEUE
+    new_pr_queue = {}
+
+    repos = _.keys old_pr_queue
+
+    _.each repos, (repo) ->
+      pr_numbers = old_pr_queue[repo]
+
+      _.each pr_numbers, (pr_number) ->
+        params =
+          user: ghOrg
+          repo: repo
+          number: pr_number
+
+        gh.issues.getRepoIssue params, (err, res) ->
+          label_names = _.map res['labels'], (label) -> label['name']
+
+          if _.include(label_names, 'Awaiting CR')
+            new_pr_queue[repo] or= []
+            new_pr_queue[repo].push(pr_number)
+
+            message = "ping @#{res['assignee']['login']}"
+            params  = _.extend { body: message }, params
+            gh.issues.createComment params, null
+
+    robot.brain.set PULL_REQUEST_QUEUE, new_pr_queue
 
   if !ghToken? or !ghOrg?
     return robot.logger.error """
@@ -107,14 +140,17 @@ module.exports = (robot) ->
         params =
           id: ghReviwerTeam
           per_page: 100
+
         gh.orgs.getTeamMembers params, (err, res) ->
           return cb "error on getting team members: #{err.toString()}" if err?
+
           cb null, {reviewers: res}
 
       (ctx, cb) ->
         # check if pull req exists
         gh.pullRequests.get prParams, (err, res) ->
           return cb "error on getting pull request: #{err.toString()}" if err?
+
           ctx['issue']    = res
           ctx['creator']  = res.user
           ctx['assignee'] = res.assignee
@@ -139,12 +175,28 @@ module.exports = (robot) ->
         gh.issues.createComment params, (err, res) -> cb err, ctx
 
       (ctx, cb) ->
-        # change assignee
+        # Get the existing labels
+        gh.issues.getRepoIssue prParams, (err, res) ->
+          ctx['existing_labels'] = _.map res['labels'], (label) -> label['name']
+          cb null, ctx
+
+      (ctx, cb) ->
+        # change assignee & assign label
         {reviewer} = ctx
-        params = _.extend { assignee: reviewer.login }, prParams
+        new_labels = ctx['existing_labels'].concat('Awaiting CR')
+        params = _.extend { assignee: reviewer.login, labels: new_labels }, prParams
         gh.issues.edit params, (err, res) -> cb err, ctx
 
       (ctx, cb) ->
+        # add pr to watch list
+        pr_queue = (robot.brain.get PULL_REQUEST_QUEUE) or {}
+        pr_queue[repo] or= []
+        pr_queue[repo] = _.union pr_queue[repo], [parseInt(pr)]
+        robot.brain.set PULL_REQUEST_QUEUE, pr_queue
+        cb null, ctx
+
+      (ctx, cb) ->
+        # tell the channel who has been assigned
         {reviewer, issue} = ctx
         msg.reply "#{reviewer.login} has been assigned for #{issue.html_url} as a reviewer"
         if ghWithAvatar
@@ -160,7 +212,6 @@ module.exports = (robot) ->
         robot.brain.set STATS_KEY, stats
 
         cb null, ctx
-
     ], (err, res) ->
       if err?
         msg.send "an error occured.\n#{err}"
@@ -195,11 +246,25 @@ module.exports = (robot) ->
 
     msg.send response
 
+  robot.respond /reviewer ping crs/i, (msg) ->
+    pingCodeReviews
+    msg.send "All CRs have been pinged."
+
+  robot.respond /reviewer show crs/i, (msg) ->
+    pr_queue = robot.brain.get PULL_REQUEST_QUEUE
+    msg.send "Listing PR Queue\n#{JSON.stringify(pr_queue)}"
+
+  # robot.respond /reviewer clear crs/i, (msg) ->
+  #   robot.brain.set PULL_REQUEST_QUEUE, {}
+  #   msg.send "CR Queue has been cleared."
+
   robot.respond /reviewer (help|\-\-h|\-h|\-help)/i, (msg) ->
-    msg.send "*COMMANDS:*\n" +
-             ">_bot reviewer help_:   shows this help\n" +
-             ">_bot reviewer for *<repo>* *<pull>*_:   assigns random reviewer for pull request\n" +
-             ">_bot reviewer show stats_:   proves the lotto has no bias\n" +
-             ">_bot reviewer list team assignments_:   lists all team ids assigned to repos\n" +
+    msg.send "*COMMANDS:*\n"                                                                          +
+             ">_bot reviewer help_:   shows this help\n"                                              +
+             ">_bot reviewer for *<repo>* *<pull>*_:   assigns random reviewer for pull request\n"    +
+             ">_bot reviewer show stats_:   proves the lotto has no bias\n"                           +
+             ">_bot reviewer reset stats_:   resets the reviewer stats\n"                             +
+             ">_bot reviewer list team assignments_:   lists all team ids assigned to repos\n"        +
+             ">_bot reviewer ping crs_:   pings all outstanding PRs awaiting code review\n"           +
              ">_bot reviewer set team *<id>* for *<repo>*_:   assigns a specific team id to a repo\n" +
              ">_bot reviewer clear team for *<repo>*_:   clears the team id for a repo"

@@ -60,32 +60,33 @@ module.exports = (robot) ->
     gh = new GitHubApi version: "3.0.0"
     gh.authenticate {type: "oauth", token: ghToken}
 
-    old_pr_queue = robot.brain.get PULL_REQUEST_QUEUE
-    new_pr_queue = {}
+    oldPrQueue = (robot.brain.get PULL_REQUEST_QUEUE) or {}
+    newPrQueue = {}
 
-    repos = _.keys old_pr_queue
+    repos = _.keys oldPrQueue
 
     _.each repos, (repo) ->
-      pr_numbers = old_pr_queue[repo]
+      oldPrs = oldPrQueue[repo]
 
-      _.each pr_numbers, (pr_number) ->
+      _.each oldPrs, (oldPr) ->
         params =
           user: ghOrg
           repo: repo
-          number: pr_number
+          number: oldPr['number']
 
         gh.issues.getRepoIssue params, (err, res) ->
-          label_names = _.map res['labels'], (label) -> label['name']
+          labelNames = _.map res['labels'], (l) -> l['name']
 
-          if _.include(label_names, 'Awaiting CR')
-            new_pr_queue[repo] or= []
-            new_pr_queue[repo].push(pr_number)
+          if _.include labelNames, 'Awaiting CR'
+            newPrQueue[repo] or= []
+            newPrQueue[repo].push(oldPr)
 
-            message = "ping @#{res['assignee']['login']}"
-            params  = _.extend { body: message }, params
-            gh.issues.createComment params, null
+            if (Date.now() - oldPr['submitted']) >= 10800000  # 3 hours
+              message = "ping @#{res['assignee']['login']}"
+              params  = _.extend { body: message }, params
+              gh.issues.createComment params, null
 
-    robot.brain.set PULL_REQUEST_QUEUE, new_pr_queue
+    robot.brain.set PULL_REQUEST_QUEUE, newPrQueue
 
   if !ghToken? or !ghOrg?
     return robot.logger.error """
@@ -103,6 +104,7 @@ module.exports = (robot) ->
     stats = robot.brain.get STATS_KEY
     msgs = ["*login, percentage, num assigned*"]
     total = 0
+
     for login, count of stats
       total += count
     for login, count of stats
@@ -111,13 +113,20 @@ module.exports = (robot) ->
     msg.send msgs.join "\n"
 
   robot.respond /reviewer for ([\w-\.]+) (\d+)( polite)?$/i, (msg) ->
-    repo   = msg.match[1]
-    pr     = msg.match[2]
-    polite = msg.match[3]?
+    repo     = msg.match[1]
+    prNumber = msg.match[2]
+    polite   = msg.match[3]?
+
+    newPr =
+      number: parseInt(prNumber)
+      submitted: Date.now()  # milliseconds since epoch
+
+    console.log(JSON.stringify(newPr))
+
     prParams =
       user: ghOrg
       repo: repo
-      number: pr
+      number: prNumber
 
     gh = new GitHubApi version: "3.0.0"
     gh.authenticate {type: "oauth", token: ghToken}
@@ -177,22 +186,26 @@ module.exports = (robot) ->
       (ctx, cb) ->
         # Get the existing labels
         gh.issues.getRepoIssue prParams, (err, res) ->
-          ctx['existing_labels'] = _.map res['labels'], (label) -> label['name']
+          ctx['existingLabels'] = _.map res['labels'], (l) -> l['name']
           cb null, ctx
 
       (ctx, cb) ->
         # change assignee & assign label
         {reviewer} = ctx
-        new_labels = ctx['existing_labels'].concat('Awaiting CR')
-        params = _.extend { assignee: reviewer.login, labels: new_labels }, prParams
+        newLabels = ctx['existingLabels'].concat('Awaiting CR')
+        params = _.extend { assignee: reviewer.login, labels: newLabels }, prParams
         gh.issues.edit params, (err, res) -> cb err, ctx
 
       (ctx, cb) ->
         # add pr to watch list
-        pr_queue = (robot.brain.get PULL_REQUEST_QUEUE) or {}
-        pr_queue[repo] or= []
-        pr_queue[repo] = _.union pr_queue[repo], [parseInt(pr)]
-        robot.brain.set PULL_REQUEST_QUEUE, pr_queue
+        prQueue = (robot.brain.get PULL_REQUEST_QUEUE) or {}
+        prQueue[repo] or= []
+        existingPrNumbers = _.map prQueue[repo], (pr) -> pr['number']
+
+        if ! _.include existingPrNumbers, newPr['number']
+          prQueue[repo] = _.union prQueue[repo], [newPr]
+          robot.brain.set PULL_REQUEST_QUEUE, prQueue
+
         cb null, ctx
 
       (ctx, cb) ->
@@ -251,12 +264,12 @@ module.exports = (robot) ->
     msg.send "All CRs have been pinged."
 
   robot.respond /reviewer show crs/i, (msg) ->
-    pr_queue = robot.brain.get PULL_REQUEST_QUEUE
-    msg.send "Listing PR Queue\n#{JSON.stringify(pr_queue)}"
+    prQueue = robot.brain.get PULL_REQUEST_QUEUE
+    msg.send "Listing PR Queue\n#{JSON.stringify(prQueue)}"
 
-  # robot.respond /reviewer clear crs/i, (msg) ->
-  #   robot.brain.set PULL_REQUEST_QUEUE, {}
-  #   msg.send "CR Queue has been cleared."
+  robot.respond /reviewer clear crs/i, (msg) ->
+    robot.brain.set PULL_REQUEST_QUEUE, {}
+    msg.send "CR Queue has been cleared."
 
   robot.respond /reviewer (help|\-\-h|\-h|\-help)/i, (msg) ->
     msg.send "*COMMANDS:*\n"                                                                          +

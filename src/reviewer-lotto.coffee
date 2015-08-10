@@ -22,6 +22,7 @@
 
 _         = require "underscore"
 async     = require "async"
+Cron      = require("cron").CronJob
 GitHubApi = require "github"
 weighted  = require "weighted"
 
@@ -81,12 +82,16 @@ module.exports = (robot) ->
             newPrQueue[repo] or= []
             newPrQueue[repo].push(oldPr)
 
-            if (Date.now() - oldPr['submitted']) >= 10800000  # 3 hours
+            if (Date.now() - oldPr['submitted']) >= (3 * 60 * 60 * 1000)  # 3 hours
               message = "ping @#{res['assignee']['login']}"
               params  = _.extend { body: message }, params
               gh.issues.createComment params, null
 
     robot.brain.set PULL_REQUEST_QUEUE, newPrQueue
+
+  scheduledJob = new Cron('00 00 9-17 * * 1-5', (->
+    pingCodeReviews()
+  ), null, true, "American/Los Angeles")
 
   if !ghToken? or !ghOrg?
     return robot.logger.error """
@@ -260,7 +265,7 @@ module.exports = (robot) ->
     msg.send response
 
   robot.respond /reviewer ping crs/i, (msg) ->
-    pingCodeReviews
+    pingCodeReviews()
     msg.send "All CRs have been pinged."
 
   robot.respond /reviewer show crs/i, (msg) ->

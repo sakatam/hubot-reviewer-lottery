@@ -38,6 +38,7 @@ module.exports = (robot) ->
   STATS_KEY             = 'reviewer-lotto-stats'
   PULL_REQUEST_QUEUE    = 'pull-request-queue'
   REPO_TEAMS            = 'repo-team-assignments'
+  GITHUB_ALIASES        = 'github-aliases'
 
   # draw lotto - weighted random selection
   draw = (reviewers, stats = null) ->
@@ -76,6 +77,7 @@ module.exports = (robot) ->
           number: oldPr['number']
 
         gh.issues.getRepoIssue params, (err, res) ->
+          link       = res['html_url']
           labelNames = _.map res['labels'], (l) -> l['name']
 
           if _.include labelNames, 'Awaiting CR'
@@ -83,11 +85,26 @@ module.exports = (robot) ->
             newPrQueue[repo].push(oldPr)
 
             if (Date.now() - oldPr['submitted']) >= (3 * 60 * 60 * 1000)  # 3 hours
-              message = "ping @#{res['assignee']['login']}"
-              params  = _.extend { body: message }, params
-              gh.issues.createComment params, null
+              message = "You have a pending code review: #{link}"
+              robot.send {room: getSlackHandleFromGithubUsername(res['assignee']['login'])}, message
 
     robot.brain.set PULL_REQUEST_QUEUE, newPrQueue
+
+  getSlackHandleFromGithubUsername = (githubUsername) ->
+    aliases = (robot.brain.get GITHUB_ALIASES) or {}
+    aliases[githubUsername]
+
+  setSlackHandleFromGithubUsername = (githubUsername, slackHandle) ->
+    aliases = (robot.brain.get GITHUB_ALIASES) or {}
+    aliases[githubUsername] = slackHandle
+
+    robot.brain.set GITHUB_ALIASES, aliases
+
+  deleteGithubUsername = (githubUsername) ->
+    aliases = robot.brain.get GITHUB_ALIASES
+    delete aliases[githubUsername]
+
+    robot.brain.set GITHUB_ALIASES, aliases
 
   scheduledJob = new Cron('00 00 9-17 * * 1-5', (->
     pingCodeReviews()
@@ -244,16 +261,7 @@ module.exports = (robot) ->
     robot.brain.set REPO_TEAMS, repoTeams
     msg.send "Team: *#{teamId}* set for repo: *#{repo}*."
 
-  robot.respond /reviewer clear team for ([\w-\.]+)/i, (msg) ->
-    repo   = msg.match[1]
-
-    repoTeams = (robot.brain.get REPO_TEAMS) or {}
-    delete repoTeams[repo]
-
-    robot.brain.set REPO_TEAMS, repoTeams
-    msg.send "Team cleared for repo: *#{repo}*."
-
-  robot.respond /reviewer list (assignments| team assignments)/i, (msg) ->
+  robot.respond /reviewer (show|list) teams/i, (msg) ->
     repoTeams = (robot.brain.get REPO_TEAMS) or {}
 
     response = "*Current repo/team assignments:*\n" +
@@ -264,11 +272,16 @@ module.exports = (robot) ->
 
     msg.send response
 
-  robot.respond /reviewer ping crs/i, (msg) ->
-    pingCodeReviews()
-    msg.send "All CRs have been pinged."
+  robot.respond /reviewer clear team for ([\w-\.]+)/i, (msg) ->
+    repo   = msg.match[1]
 
-  robot.respond /reviewer show crs/i, (msg) ->
+    repoTeams = (robot.brain.get REPO_TEAMS) or {}
+    delete repoTeams[repo]
+
+    robot.brain.set REPO_TEAMS, repoTeams
+    msg.send "Team cleared for repo: *#{repo}*."
+
+  robot.respond /reviewer (show|list) crs/i, (msg) ->
     prQueue = robot.brain.get PULL_REQUEST_QUEUE
     msg.send "Listing PR Queue\n#{JSON.stringify(prQueue)}"
 
@@ -276,13 +289,35 @@ module.exports = (robot) ->
     robot.brain.set PULL_REQUEST_QUEUE, {}
     msg.send "CR Queue has been cleared."
 
+  robot.respond /reviewer set alias ([\w-\.]+) for ([\w-\.]+)/i, (msg) ->
+    githubUsername = msg.match[1]
+    slackHandle    = msg.match[2]
+
+    console.log(githubUsername)
+    console.log(slackHandle)
+
+    setSlackHandleFromGithubUsername(githubUsername, slackHandle)
+    msg.send "Alias set: Github: #{githubUsername} mapped to Slack handle: #{slackHandle}."
+
+  robot.respond /reviewer (show|list) aliases/i, (msg) ->
+    aliases = robot.brain.get GITHUB_ALIASES
+    msg.send "Listing Github aliases\n#{JSON.stringify(aliases)}"
+
+  robot.respond /reviewer clear alias ([\w-\.]+)/i, (msg) ->
+    githubUsername = msg.match[1]
+
+    deleteGithubUsername(githubUsername)
+    msg.send "Alias cleared: Github: #{githubUsername}."
+
   robot.respond /reviewer (help|\-\-h|\-h|\-help)/i, (msg) ->
-    msg.send "*COMMANDS:*\n"                                                                          +
-             ">_bot reviewer help_:   shows this help\n"                                              +
-             ">_bot reviewer for *<repo>* *<pull>*_:   assigns random reviewer for pull request\n"    +
-             ">_bot reviewer show stats_:   proves the lotto has no bias\n"                           +
-             ">_bot reviewer reset stats_:   resets the reviewer stats\n"                             +
-             ">_bot reviewer list team assignments_:   lists all team ids assigned to repos\n"        +
-             ">_bot reviewer ping crs_:   pings all outstanding PRs awaiting code review\n"           +
-             ">_bot reviewer set team *<id>* for *<repo>*_:   assigns a specific team id to a repo\n" +
-             ">_bot reviewer clear team for *<repo>*_:   clears the team id for a repo"
+    msg.send "*COMMANDS:*\n"                                                                                                +
+             ">_bot reviewer help_:   shows this help\n"                                                                    +
+             ">_bot reviewer for *<repo>* *<pull>*_:   assigns random reviewer for pull request\n"                          +
+             ">_bot reviewer show stats_:   proves the lotto has no bias\n"                                                 +
+             ">_bot reviewer reset stats_:   resets the reviewer stats\n"                                                   +
+             ">_bot reviewer set team *<id>* for *<repo>*_:   assigns a specific team id to a repo\n"                       +
+             ">_bot reviewer show teams_:   lists all team ids assigned to repos\n"                                         +
+             ">_bot reviewer clear team for *<repo>*_:   clears the team id for a repo\n"                                   +
+             ">_bot reviewer set alias *<githubUsername>* *<slackHandle>*_:   define a github username/slack handle pair\n" +
+             ">_bot reviewer show aliases_:   list all github username/slack handle pairs\n"                              +
+             ">_bot reviewer clear alias *<githubUsername>*_:    clear a github username/slack handle pair\n"

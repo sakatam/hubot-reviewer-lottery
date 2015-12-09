@@ -79,21 +79,22 @@ module.exports = (robot) ->
         gh.issues.getRepoIssue params, (err, res) ->
           link       = res['html_url']
           labelNames = _.map res['labels'], (l) -> l['name']
+          issueState = res['state']
 
-          if _.include labelNames, 'Awaiting CR'
+          if _.include(labelNames, 'Awaiting CR') && (issueState == 'open')
             newPrQueue[repo] or= []
             newPrQueue[repo].push(oldPr)
+            codeReviewAge = ((Date.now() - oldPr['submitted']) / (1.0 * 60 * 60 * 1000)).toFixed(1) # in hours
+            slackHandle   = getSlackHandleFromGithubUsername(res['assignee']['login'])
 
-            if (Date.now() - oldPr['submitted']) >= (1 * 60 * 60 * 1000)  # 1 hours
-              slack_handle = getSlackHandleFromGithubUsername(res['assignee']['login'])
-              message      = "You have a pending code review: #{link}"
+            if (codeReviewAge >= 1.0)
+              message = "You have a pending code review: #{link}"
 
-              robot.send {room: slack_handle}, message
+              robot.send {room: slackHandle}, message
 
-            if (Date.now() - oldPr['submitted']) >= (3 * 60 * 60 * 1000)  # 3 hours
-              slack_handle = getSlackHandleFromGithubUsername(res['assignee']['login'])
-              insults      = ["For shame.", ":sadpanda:", ":waiting:", "Friends don't let friends check-in unreviewed code.", "People have made it through the DMV in less time."]
-              message      = "@#{slack_handle}, You have a pending code review older than 3 hours. #{_.sample(insults)}"
+            if (codeReviewAge >= 3.0) && everyThreeHours(codeReviewAge) && withinBusinessHours()
+              insults = ['For shame.', ':sadpanda:', ':waiting:', "Friends don't let friends check-in unreviewed code.", 'People have made it through the DMV in less time.']
+              message = "@#{slackHandle}, You have a pending code review older than 3 hours. #{_.sample(insults)}"
 
               robot.send {room: "#engineering"}, message
 
@@ -114,6 +115,15 @@ module.exports = (robot) ->
     delete aliases[githubUsername]
 
     robot.brain.set GITHUB_ALIASES, aliases
+
+  everyThreeHours = (age) ->
+    (age.toFixed() % 3) == 0
+
+  withinBusinessHours = (date) ->
+    date = (typeof date === 'undefined') ? Date.now() : date;
+
+    _.include(_.range(8, 18), date.hours())
+
 
   scheduledJob = new Cron('00 00 9-17 * * 1-5', (->
     pingCodeReviews()

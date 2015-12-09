@@ -84,9 +84,18 @@ module.exports = (robot) ->
             newPrQueue[repo] or= []
             newPrQueue[repo].push(oldPr)
 
+            if (Date.now() - oldPr['submitted']) >= (1 * 60 * 60 * 1000)  # 1 hours
+              slack_handle = getSlackHandleFromGithubUsername(res['assignee']['login'])
+              message      = "You have a pending code review: #{link}"
+
+              robot.send {room: slack_handle}, message
+
             if (Date.now() - oldPr['submitted']) >= (3 * 60 * 60 * 1000)  # 3 hours
-              message = "You have a pending code review: #{link}"
-              robot.send {room: getSlackHandleFromGithubUsername(res['assignee']['login'])}, message
+              slack_handle = getSlackHandleFromGithubUsername(res['assignee']['login'])
+              insults      = ["For shame.", ":sadpanda:", ":waiting:", "Friends don't let friends check-in unreviewed code.", "People have made it through the DMV in less time."]
+              message      = "@#{slack_handle}, You have a pending code review older than 3 hours. #{_.sample(insults)}"
+
+              robot.send {room: "#engineering"}, message
 
     robot.brain.set PULL_REQUEST_QUEUE, newPrQueue
 

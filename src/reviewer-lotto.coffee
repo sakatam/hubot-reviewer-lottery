@@ -79,24 +79,14 @@ module.exports = (robot) ->
         gh.issues.getRepoIssue params, (err, res) ->
           link       = res['html_url']
           labelNames = _.map res['labels'], (l) -> l['name']
-          issueState = res['state']
 
-          if _.include(labelNames, 'Awaiting CR') && (issueState == 'open')
+          if _.include labelNames, 'Awaiting CR'
             newPrQueue[repo] or= []
             newPrQueue[repo].push(oldPr)
-            codeReviewAge = ((Date.now() - oldPr['submitted']) / (1.0 * 60 * 60 * 1000)).toFixed(1) # in hours
-            slackHandle   = getSlackHandleFromGithubUsername(res['assignee']['login'])
 
-            if (codeReviewAge >= 1.0)
+            if (Date.now() - oldPr['submitted']) >= (3 * 60 * 60 * 1000)  # 3 hours
               message = "You have a pending code review: #{link}"
-
-              robot.send {room: slackHandle}, message
-
-            if (codeReviewAge >= 3.0) && everyThreeHours(codeReviewAge) && withinBusinessHours()
-              insults = ['For shame.', ':sadpanda:', ':waiting:', "Friends don't let friends check-in unreviewed code.", 'People have made it through the DMV in less time.']
-              message = "@#{slackHandle}, You have a pending code review older than 3 hours. #{_.sample(insults)}"
-
-              robot.send {room: "#engineering"}, message
+              robot.send {room: getSlackHandleFromGithubUsername(res['assignee']['login'])}, message
 
     robot.brain.set PULL_REQUEST_QUEUE, newPrQueue
 
@@ -115,15 +105,6 @@ module.exports = (robot) ->
     delete aliases[githubUsername]
 
     robot.brain.set GITHUB_ALIASES, aliases
-
-  everyThreeHours = (age) ->
-    (age.toFixed() % 3) == 0
-
-  withinBusinessHours = (date) ->
-    date = (typeof date === 'undefined') ? Date.now() : date;
-
-    _.include(_.range(8, 18), date.hours())
-
 
   scheduledJob = new Cron('00 00 9-17 * * 1-5', (->
     pingCodeReviews()

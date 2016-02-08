@@ -310,14 +310,14 @@ module.exports = (robot) ->
     msg.send "Alias cleared: Github: #{githubUsername}."
 
   robot.respond /reviewer (help|\-\-h|\-h|\-help)/i, (msg) ->
-    msg.send "*COMMANDS:*\n"                                                                                                +
-             ">_bot reviewer help_:   shows this help\n"                                                                    +
-             ">_bot reviewer for *<repo>* *<pull>*_:   assigns random reviewer for pull request\n"                          +
-             ">_bot reviewer show stats_:   proves the lotto has no bias\n"                                                 +
-             ">_bot reviewer reset stats_:   resets the reviewer stats\n"                                                   +
-             ">_bot reviewer set team *<id>* for *<repo>*_:   assigns a specific team id to a repo\n"                       +
-             ">_bot reviewer show teams_:   lists all team ids assigned to repos\n"                                         +
-             ">_bot reviewer clear team for *<repo>*_:   clears the team id for a repo\n"                                   +
-             ">_bot reviewer set alias *<githubUsername>* *<slackHandle>*_:   define a github username/slack handle pair\n" +
-             ">_bot reviewer show aliases_:   list all github username/slack handle pairs\n"                              +
+    msg.send "*COMMANDS:*\n"                                                                                                    +
+             ">_bot reviewer help_:   shows this help\n"                                                                        +
+             ">_bot reviewer for *<repo>* *<pull>*_:   assigns random reviewer for pull request\n"                              +
+             ">_bot reviewer show stats_:   proves the lotto has no bias\n"                                                     +
+             ">_bot reviewer reset stats_:   resets the reviewer stats\n"                                                       +
+             ">_bot reviewer set team *<id>* for *<repo>*_:   assigns a specific team id to a repo\n"                           +
+             ">_bot reviewer show teams_:   lists all team ids assigned to repos\n"                                             +
+             ">_bot reviewer clear team for *<repo>*_:   clears the team id for a repo\n"                                       +
+             ">_bot reviewer set alias *<githubUsername>* for *<slackHandle>*_:   define a github username/slack handle pair\n" +
+             ">_bot reviewer show aliases_:   list all github username/slack handle pairs\n"                                    +
              ">_bot reviewer clear alias *<githubUsername>*_:    clear a github username/slack handle pair\n"

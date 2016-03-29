@@ -31,23 +31,25 @@ module.exports = (robot) ->
   ghOrg                 = process.env.HUBOT_GITHUB_ORG
   ghDefaultReviewerTeam = process.env.HUBOT_GITHUB_REVIEWER_TEAM
   ghWithAvatar          = process.env.HUBOT_GITHUB_WITH_AVATAR
-  codeReviewChecklist   = "\n\n#### Code Review Checklist:\n"                                      +
-                          "- **All Code**\n"                                                       +
-                          "  - [ ] Intent of the code/changes are clear?\n"                        +
-                          "  - [ ] Comments are provided whenever something may be unintuitive?\n" +
-                          "  - [ ] Implementation of the code/changes makes sense?\n"              +
-                          "  - [ ] Code/changes are free of typos and basic errors?\n"             +
-                          "  - [ ] Code/specs can be run on your local machine?\n"                 +
-                          "  - [ ] Changes are not breaking a public API?\n"                       +
-                          "    - [ ] If so, documentation is updated?\n"                           +
-                          "  - [ ] Code/changes don't reimplement existing features?\n"            +
-                          "  - [ ] Performance implications have been considered?\n"               +
-                          "  - [ ] Code/changes include all appropriate tests?\n"                  +
-                          "- **Migrations**\n"                                                     +
-                          "  - [ ] All migrations run on a clone of production data?\n"            +
-                          "  - [ ] All migrations are reversable: `rake db:rollback`?\n"           +
-                          "- **Rake Tasks**\n"                                                     +
-                          "  - [ ] All rake tasks run on a clone of production data?\n"            +
+  codeReviewChecklist   = "\n\n#### Code Review Checklist:\n"                                            +
+                          "- **All Code**\n"                                                             +
+                          "  - [ ] Intent of the code/changes are clear?\n"                              +
+                          "  - [ ] Comments are provided whenever something may be unintuitive?\n"       +
+                          "  - [ ] Implementation of the code/changes makes sense?\n"                    +
+                          "  - [ ] Code/changes are free of typos and basic errors?\n"                   +
+                          "  - [ ] Code/specs can be run on your local machine?\n"                       +
+                          "  - [ ] Changes are not breaking a public API?\n"                             +
+                          "    - [ ] If so, documentation is updated?\n"                                 +
+                          "  - [ ] Code/changes don't reimplement existing features?\n"                  +
+                          "  - [ ] Performance implications have been considered?\n"                     +
+                          "  - [ ] Code/changes include all appropriate tests?\n"                        +
+                          "- **Migrations**\n"                                                           +
+                          "  - [ ] All migrations run on a clone of production data?\n"                  +
+                          "  - [ ] All migrations are reversable: `rake db:rollback`?\n"                 +
+                          "  - [ ] All migrations are backwards-compatible?\n"                           +
+                          "    - [ ] All migrations check for the existence of any models referenced?\n" +                          
+                          "- **Rake Tasks**\n"                                                           +
+                          "  - [ ] All rake tasks run on a clone of production data?\n"                  +
                           "  - [ ] Code/changes include all appropriate tests?"
   normalMessage         = process.env.HUBOT_REVIEWER_LOTTO_MESSAGE || "Please review this." + codeReviewChecklist
   politeMessage         = process.env.HUBOT_REVIEWER_LOTTO_POLITE_MESSAGE || "#{normalMessage} :bow::bow::bow::bow:" + codeReviewChecklist
